@@ -1,6 +1,7 @@
 require 'mysql2'
 require 'active_record'
 require 'pry'
+require_relative 'connect_db'
 
 class Discussion < ActiveRecord::Base
   self.table_name = 'GDN_Discussion'
@@ -22,62 +23,54 @@ class User < ActiveRecord::Base
   self.primary_key = 'UserID'
 end
 
-#binding.pry
+connect_db
+binding.pry
 
-npc_id = Category.where(Name: 'NPCs').first.CategoryID
-archivar_id = User.where(Name: 'Archivar').first.UserID
+NpcID = Category.where(Name: 'NPCs').first.CategoryID
+ArchivarID = User.where(Name: 'Archivar').first.UserID
+
 
 # Erstmal alle einfügen, an dieser Stelle muss natürlich noch die Verbindung zu Ronny's Skript / DB geschaffen werden
 # Man könnte hier aber zum Beispiel auch die entstandene ID in Ronnys DB zurückschreiben. Das macht es für das Link genereieren leichter.
-['Dardiana Falconsflight','Ilundur Phoreneus','Jarl der Graue','Jochen Malluck','Johannes vom Silberschweif','Marhand Serpenthelm',"Theoloseus D'Antanes",'Thoralf Halvarson','Tolf Shmid'].each do |name|
-  next if Discussion.where(Name: name).any?
-  Discussion.create CategoryID: npc_id, InsertUserID: archivar_id, Name: name, Body: "<h1>#{name}</h1>\n#TODO Hier kann alles zu dieser Person festgehalten werden", Format: 'HTML', DateInserted: Time.now, InsertIPAddress: '127.0.0.1'
-end
-
-# Sortiertung kann man leider nicht für einzelne Categorien einstellen. Wir haben Forumstyle aktiviert, das heißt da wo zuletzt was los war, das steht ganz oben.
-# Um das zu "Umgehen" werden die NPC-Topics einfach sortiert und in der Reihenfolge "getoucht" so, dass die Zeitstempel dann passen sollten.
-# Ein Hoch auf Backendzugriffe und mächte Programmiersprachen ;-)
-
-Discussion.where(CategoryID: npc_id).order(Name: :asc).each do |npc|
-  npc.DateInserted = Time.now
-#  npc.UpdateUserID = archivar_id
-#  npc.DateUpdated = Time.now
-#  npc.UpdateIPAddress = '127.0.0.1',
-#  npc.DateLastComment = Time.now,
-#  npc.LastCommentUserID = archivar_id,
-
-  npc.save
-  sleep 1
-end
-
-npc_index = Discussion.where(Name: 'Schnellübersicht NPCs - alphabetisch').first
-body = ''
-
-last_letter = ''
-qty = 0
-letters = []
-
-Discussion.where(CategoryID: npc_id).order(Name: :asc).select(:DiscussionID, :Name).each_with_index do |npc, idx|
-  start_letter = npc.Name[0,1]
-  if last_letter != start_letter
-    letters << start_letter
-    body += "</ul>" if idx > 0
-    body += "<h2><a name='#{start_letter}'>#{start_letter}</h2>"
-    body += "<ul>"
+def create_npc_templates
+  ['Dardiana Falconsflight','Ilundur Phoreneus','Jarl der Graue','Jochen Malluck','Johannes vom Silberschweif','Marhand Serpenthelm',"Theoloseus D'Antanes",'Thoralf Halvarson','Tolf Shmid'].each do |name|
+    next if Discussion.where(Name: name).any?
+    Discussion.create CategoryID: NpcID, InsertUserID: ArchivarID, Name: name, Body: "<h1>#{name}</h1>\n<b>Profession:</b> Dorfschneider|Erzmagier|Mutti von Tarso\n<b>Aufenthaltsort:</b> Otternburg\n<b>Kurzbeschreibung:</b> Die taucht dann auch in der Übersicht auf<hr/>#TODO Hier kann alles zu dieser Person festgehalten werden", Format: 'HTML', DateInserted: Time.now, InsertIPAddress: '127.0.0.1'
   end
-  body += "<li><a href='/index.php?p=/discussion/#{npc.DiscussionID}'>#{npc.Name}</a></li>"
-  last_letter = start_letter
-  qty = idx
+
+  cat = Category.find(NpcID)
+  cat.CountDiscussions = Discussion.where(CategoryID: NpcID).count
+  cat.save
 end
-body += "</ul>"
 
-head = "<span>Achtung - diese Liste wird automatisch erstellt und regelmäßig überschrieben. Manuelle Änderungen gehen verloren!</span>\nAnzahl erfasster NPC's: #{qty}<hr/>| #{letters.map{|a| "<a href='##{a}'>#{a}</a> | "}.join}<hr/>"
+def create_abc_sort
+  npc_index = Discussion.where(Name: 'Schnellübersicht NPCs - alphabetisch').first
+  body = ''
 
-npc_index.Body = head + body
-npc_index.save
+  last_letter = ''
+  letters = []
 
-# binding.pry
+  Discussion.where(CategoryID: NpcID).order(Name: :asc).select(:DiscussionID, :Name).each_with_index do |npc,idx|
+    start_letter = npc.Name[0,1]
+    if last_letter != start_letter
+      letters << start_letter
+      body += "</ul>" if idx > 0
+      body += "<h2><a name='#{start_letter}'>#{start_letter}</h2>"
+      body += "<ul>"
+    end
+    body += "<li><a href='/index.php?p=/discussion/#{npc.DiscussionID}'>#{npc.Name}</a></li>"
+    last_letter = start_letter
+  end
+  body += "</ul>"
+  
+  head = "<span>Achtung - diese Liste wird automatisch erstellt und regelmäßig überschrieben. Manuelle Änderungen gehen verloren!</span><hr/>| #{letters.map{|a| "<a href='##{a}'>#{a}</a> | "}.join}<hr/>"
+  
+  npc_index.Body = head + body
+  npc_index.UpdateUserID = ArchivarID
+  npc_index.DateUpdated = Time.now
+  npc_index.InsertIPAddress = '127.0.0.1'
+  npc_index.save
+end
 
-# Testdaten löschen
-# Discussion.where(CategoryID: npc_id).delete_all
-
+create_npc_templates
+create_abc_sort
